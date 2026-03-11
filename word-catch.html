@@ -386,9 +386,9 @@ canvas.addEventListener('click', e => {
 <script>
 // ===== GAME FUNCTIONS =====
 function getDiffSettings() {
-  if (difficulty === 'easy') return { distractors: 3, baseSpeed: 0.7, speedInc: 0.04, spawnInterval: 2.0 };
-  if (difficulty === 'hard') return { distractors: 6, baseSpeed: 1.4, speedInc: 0.08, spawnInterval: 1.0 };
-  return { distractors: 4, baseSpeed: 1.0, speedInc: 0.06, spawnInterval: 1.4 };
+  if (difficulty === 'easy') return { distractors: 2, baseSpeed: 0.7, speedInc: 0.04, spawnInterval: 2.5 };
+  if (difficulty === 'hard') return { distractors: 4, baseSpeed: 1.4, speedInc: 0.08, spawnInterval: 1.4 };
+  return { distractors: 3, baseSpeed: 1.0, speedInc: 0.06, spawnInterval: 1.8 };
 }
 
 function startGame() {
@@ -471,8 +471,8 @@ function setupPhase() {
       y: -40,
       speed: (0.7 + Math.random() * 0.8) * speedMult,
       color: PILL_COLORS[Math.floor(Math.random() * PILL_COLORS.length)],
-      rotation: (Math.random() - 0.5) * 0.15,
-      rotSpeed: (Math.random() - 0.5) * 0.01,
+      rotation: 0,
+      rotSpeed: 0,
       width: 0, height: 36, caught: false, missed: false,
       spawned: true
     };
@@ -657,12 +657,16 @@ function update(dt) {
   const playerY = H * 0.88;
   const playerW = 80, playerH = 80;
 
-  // Spawn words from queue with staggered timing
+  // Spawn words from queue — only if no active word is still near the top
   const settings = getDiffSettings();
   spawnCooldown -= dt;
   if (spawnCooldown <= 0 && spawnQueue.length > 0) {
-    fallingWords.push(spawnQueue.shift());
-    spawnCooldown = settings.spawnInterval * (0.7 + Math.random() * 0.6);
+    // Check that no active word is above 30% of screen height to avoid overlap
+    const topClear = fallingWords.every(fw => fw.caught || fw.missed || fw.y > H * 0.3);
+    if (topClear) {
+      fallingWords.push(spawnQueue.shift());
+      spawnCooldown = settings.spawnInterval * (0.7 + Math.random() * 0.6);
+    }
   }
 
   // Update falling words
