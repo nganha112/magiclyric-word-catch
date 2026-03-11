@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Word Catch</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #90C880; font-family: 'Nunito', sans-serif; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+// ===== WORD DATA =====
+const WORDS = [
+  { word: "happy", synonyms: ["joyful","cheerful","glad","delighted"], antonyms: ["sad","unhappy","miserable","gloomy"] },
+  { word: "fast", synonyms: ["quick","rapid","swift","speedy"], antonyms: ["slow","sluggish","leisurely","unhurried"] },
+  { word: "big", synonyms: ["large","huge","enormous","giant"], antonyms: ["small","tiny","little","miniature"] },
+  { word: "brave", synonyms: ["courageous","bold","fearless","daring"], antonyms: ["cowardly","timid","afraid","fearful"] },
+  { word: "bright", synonyms: ["shiny","glowing","radiant","brilliant"], antonyms: ["dark","dim","dull","gloomy"] },
+  { word: "calm", synonyms: ["peaceful","quiet","relaxed","serene"], antonyms: ["angry","nervous","anxious","restless"] },
+  { word: "clean", synonyms: ["spotless","tidy","pure","neat"], antonyms: ["dirty","messy","filthy","grimy"] },
+  { word: "cold", synonyms: ["chilly","freezing","icy","cool"], antonyms: ["hot","warm","boiling","heated"] },
+  { word: "strong", synonyms: ["powerful","mighty","tough","sturdy"], antonyms: ["weak","fragile","feeble","delicate"] },
+  { word: "old", synonyms: ["ancient","aged","elderly","mature"], antonyms: ["young","new","modern","fresh"] },
+  { word: "rich", synonyms: ["wealthy","affluent","prosperous","loaded"], antonyms: ["poor","broke","needy","destitute"] },
+  { word: "loud", synonyms: ["noisy","booming","thunderous","deafening"], antonyms: ["quiet","silent","soft","hushed"] },
+  { word: "easy", synonyms: ["simple","effortless","basic","straightforward"], antonyms: ["hard","difficult","tough","complex"] },
+  { word: "beautiful", synonyms: ["pretty","lovely","gorgeous","stunning"], antonyms: ["ugly","hideous","unattractive","plain"] },
+  { word: "begin", synonyms: ["start","commence","launch","initiate"], antonyms: ["end","finish","stop","conclude"] },
+  { word: "love", synonyms: ["adore","cherish","treasure","worship"], antonyms: ["hate","despise","loathe","detest"] },
+  { word: "give", synonyms: ["donate","offer","provide","grant"], antonyms: ["take","receive","grab","seize"] },
+  { word: "build", synonyms: ["construct","create","assemble","make"], antonyms: ["destroy","demolish","wreck","ruin"] },
+  { word: "rise", synonyms: ["ascend","climb","soar","elevate"], antonyms: ["fall","drop","descend","sink"] },
+  { word: "laugh", synonyms: ["giggle","chuckle","cackle","snicker"], antonyms: ["cry","weep","sob","wail"] },
+  { word: "smart", synonyms: ["clever","intelligent","brilliant","wise"], antonyms: ["foolish","stupid","dumb","ignorant"] },
+  { word: "kind", synonyms: ["gentle","caring","generous","friendly"], antonyms: ["cruel","mean","harsh","selfish"] },
+  { word: "wet", synonyms: ["damp","moist","soaked","drenched"], antonyms: ["dry","arid","parched","dehydrated"] },
+  { word: "full", synonyms: ["packed","stuffed","loaded","complete"], antonyms: ["empty","vacant","hollow","bare"] },
+  { word: "safe", synonyms: ["secure","protected","guarded","sheltered"], antonyms: ["dangerous","risky","unsafe","hazardous"] }
+];
+</script>
+<script>
+// ===== IMAGE ASSETS =====
+const bgImg = new Image();
+bgImg.src = 'asset/bg.png';
+const catDefaultImg = new Image();
+catDefaultImg.src = 'asset/cat_default.svg';
+const catOpenImg = new Image();
+catOpenImg.src = 'asset/cat_open.svg';
+let catMouthOpen = false;
+let catMouthTimer = 0;
+
+// ===== KAWAII PALETTE =====
+const CREAM = '#FFF5E6';
+const SOFT_PINK = '#F8D7DA';
+const LIGHT_BROWN = '#D4A574';
+const BABY_BLUE = '#B8E6F0';
+const WARM_BROWN = '#8B6B4A';
+const DARK_BROWN = '#5C3D2E';
+const LAVENDER = '#E8D5F5';
+const MINT = '#C8F0D4';
+const PEACH = '#FDDCB5';
+const ROSE = '#F2A6B3';
+
+const PILL_COLORS = [SOFT_PINK, LAVENDER, MINT, PEACH, BABY_BLUE, '#F5E0C3', ROSE, '#D4EAF7'];
+const OUTLINE_W = 2.5;
+
+// ===== CANVAS SETUP =====
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W, H, scale;
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  scale = Math.min(W / 400, H / 700);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ===== AUDIO =====
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    if (type === 'correct') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523, now);
+      osc.frequency.linearRampToValueAtTime(784, now + 0.1);
+      osc.frequency.linearRampToValueAtTime(1047, now + 0.2);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.3);
+      osc.start(now); osc.stop(now + 0.3);
+    } else if (type === 'wrong') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(200, now);
+      osc.frequency.linearRampToValueAtTime(100, now + 0.2);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.25);
+      osc.start(now); osc.stop(now + 0.25);
+    } else if (type === 'combo') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, now);
+      osc.frequency.linearRampToValueAtTime(880, now + 0.1);
+      osc.frequency.linearRampToValueAtTime(1320, now + 0.2);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.4);
+      osc.start(now); osc.stop(now + 0.4);
+    } else if (type === 'countdown') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.15);
+      osc.start(now); osc.stop(now + 0.15);
+    } else if (type === 'go') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.3);
+      osc.start(now); osc.stop(now + 0.3);
+    }
+  } catch(e) {}
+}
+
+// ===== BACKGROUND MUSIC =====
+let musicNodes = null;
+const BPM = 128;
+const BEAT = 60 / BPM;
+const BASS_NOTES = [130.81, 146.83, 164.81, 196.00, 220.00, 196.00, 164.81, 146.83];
+const MELODY_NOTES = [
+  523.25, 587.33, 659.25, 783.99, 880.00, 783.99, 659.25, 587.33,
+  523.25, 440.00, 523.25, 587.33, 659.25, 783.99, 659.25, 523.25
+];
+
+function startMusic() {
+  stopMusic();
+  try {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.18;
+    masterGain.connect(audioCtx.destination);
+    const kickGain = audioCtx.createGain();
+    kickGain.gain.value = 0;
+    kickGain.connect(masterGain);
+    const bassOsc = audioCtx.createOscillator();
+    const bassGain = audioCtx.createGain();
+    const bassFilter = audioCtx.createBiquadFilter();
+    bassOsc.type = 'sawtooth';
+    bassFilter.type = 'lowpass';
+    bassFilter.frequency.value = 300;
+    bassOsc.connect(bassFilter);
+    bassFilter.connect(bassGain);
+    bassGain.gain.value = 0.5;
+    bassGain.connect(masterGain);
+    bassOsc.start();
+    const melOsc = audioCtx.createOscillator();
+    const melGain = audioCtx.createGain();
+    const melFilter = audioCtx.createBiquadFilter();
+    melOsc.type = 'triangle';
+    melFilter.type = 'lowpass';
+    melFilter.frequency.value = 2000;
+    melOsc.connect(melFilter);
+    melFilter.connect(melGain);
+    melGain.gain.value = 0.25;
+    melGain.connect(masterGain);
+    melOsc.start();
+    const bufferSize = audioCtx.sampleRate * 0.05;
+    const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const hatGain = audioCtx.createGain();
+    hatGain.gain.value = 0;
+    const hatFilter = audioCtx.createBiquadFilter();
+    hatFilter.type = 'highpass';
+    hatFilter.frequency.value = 8000;
+    hatFilter.connect(hatGain);
+    hatGain.connect(masterGain);
+    let beatIndex = 0;
+    const startTime = audioCtx.currentTime + 0.1;
+    function scheduleBeat() {
+      if (!musicNodes) return;
+      const now = audioCtx.currentTime;
+      const beatTime = startTime + beatIndex * BEAT;
+      if (beatTime > now + 2) { setTimeout(scheduleBeat, 200); return; }
+      const bassIdx = Math.floor(beatIndex / 2) % BASS_NOTES.length;
+      bassOsc.frequency.setValueAtTime(BASS_NOTES[bassIdx], beatTime);
+      bassGain.gain.setValueAtTime(0.5, beatTime);
+      bassGain.gain.linearRampToValueAtTime(0.25, beatTime + BEAT * 1.5);
+      const melIdx = beatIndex % MELODY_NOTES.length;
+      if (beatIndex % 2 === 0 || Math.random() > 0.4) {
+        melOsc.frequency.setValueAtTime(MELODY_NOTES[melIdx], beatTime);
+        melGain.gain.setValueAtTime(0.25, beatTime);
+        melGain.gain.linearRampToValueAtTime(0.05, beatTime + BEAT * 0.8);
+      } else { melGain.gain.setValueAtTime(0.0, beatTime); }
+      if (beatIndex % 4 === 0 || beatIndex % 4 === 2) {
+        const kickOsc = audioCtx.createOscillator();
+        const kGain = audioCtx.createGain();
+        kickOsc.type = 'sine';
+        kickOsc.frequency.setValueAtTime(150, beatTime);
+        kickOsc.frequency.exponentialRampToValueAtTime(40, beatTime + 0.12);
+        kGain.gain.setValueAtTime(0.7, beatTime);
+        kGain.gain.linearRampToValueAtTime(0, beatTime + 0.15);
+        kickOsc.connect(kGain); kGain.connect(masterGain);
+        kickOsc.start(beatTime); kickOsc.stop(beatTime + 0.2);
+      }
+      try {
+        const hs = audioCtx.createBufferSource();
+        hs.buffer = noiseBuffer;
+        hs.connect(hatFilter);
+        const vol = (beatIndex % 2 === 1) ? 0.15 : 0.08;
+        hatGain.gain.setValueAtTime(vol, beatTime);
+        hatGain.gain.linearRampToValueAtTime(0, beatTime + 0.05);
+        hs.start(beatTime); hs.stop(beatTime + 0.05);
+      } catch(e) {}
+      beatIndex++;
+      const nextBeatTime = startTime + beatIndex * BEAT;
+      const delay = Math.max(10, (nextBeatTime - audioCtx.currentTime) * 1000 - 100);
+      setTimeout(scheduleBeat, delay);
+    }
+    musicNodes = { masterGain, bassOsc, melOsc, scheduleBeat };
+    scheduleBeat();
+  } catch(e) { console.log('Music error:', e); }
+}
+
+function stopMusic() {
+  if (!musicNodes) return;
+  try {
+    musicNodes.masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+    const nodes = musicNodes;
+    musicNodes = null;
+    setTimeout(() => {
+      try { nodes.bassOsc.stop(); } catch(e) {}
+      try { nodes.melOsc.stop(); } catch(e) {}
+      try { nodes.masterGain.disconnect(); } catch(e) {}
+    }, 600);
+  } catch(e) { musicNodes = null; }
+}
+</script>
+<script>
+// ===== GAME STATE =====
+let state = 'start';
+let score = 0, lives = 3, round = 0, combo = 0, maxCombo = 0;
+let highScore = parseInt(localStorage.getItem('wordCatchHigh')) || 0;
+let difficulty = 'medium';
+let baseWord = null, challengeType = '', correctWord = '';
+let fallingWords = [], particles = [], floatingTexts = [];
+let playerX = 0, playerTargetX = 0;
+let roundResolved = false;
+let roundTimer = 0;
+let countdownValue = 3, countdownTimer = 0;
+let screenShake = 0, flashColor = null, flashAlpha = 0;
+let roundHistory = [];
+
+// Start screen falling words
+let startScreenWords = [];
+function initStartScreenWords() {
+  startScreenWords = [];
+  for (let i = 0; i < 8; i++) {
+    const entry = WORDS[Math.floor(Math.random() * WORDS.length)];
+    const allW = [...entry.synonyms, ...entry.antonyms, entry.word];
+    startScreenWords.push({
+      text: allW[Math.floor(Math.random() * allW.length)],
+      x: Math.random() * W,
+      y: Math.random() * H,
+      speed: Math.random() * 0.4 + 0.2,
+      color: PILL_COLORS[Math.floor(Math.random() * PILL_COLORS.length)],
+      alpha: 0.25 + Math.random() * 0.15,
+      rotation: (Math.random() - 0.5) * 0.2
+    });
+  }
+}
+initStartScreenWords();
+
+// ===== INPUT =====
+let keys = {};
+let touchX = null, touchActive = false;
+
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (state === 'start' && (e.key === 'Enter' || e.key === ' ')) startGame();
+  if (state === 'gameOver' && (e.key === 'Enter' || e.key === ' ')) resetToStart();
+  if (state === 'start') {
+    if (e.key === '1') difficulty = 'easy';
+    if (e.key === '2') difficulty = 'medium';
+    if (e.key === '3') difficulty = 'hard';
+  }
+});
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const t = e.touches[0];
+  if (state === 'start') {
+    const cx = W / 2, cy = H * 0.62;
+    if (Math.abs(t.clientX - cx) < 100 && Math.abs(t.clientY - cy) < 30) { startGame(); return; }
+    const btnY = H * 0.74;
+    const btnW = 70, gap = 15;
+    const totalW = btnW * 3 + gap * 2;
+    const startX = (W - totalW) / 2;
+    if (t.clientY > btnY - 20 && t.clientY < btnY + 20) {
+      if (t.clientX > startX && t.clientX < startX + btnW) difficulty = 'easy';
+      else if (t.clientX > startX + btnW + gap && t.clientX < startX + btnW * 2 + gap) difficulty = 'medium';
+      else if (t.clientX > startX + btnW * 2 + gap * 2 && t.clientX < startX + btnW * 3 + gap * 2) difficulty = 'hard';
+    }
+    return;
+  }
+  if (state === 'gameOver') { resetToStart(); return; }
+  touchX = t.clientX;
+  touchActive = true;
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (touchActive) touchX = e.touches[0].clientX;
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  touchActive = false;
+  touchX = null;
+}, { passive: false });
+
+canvas.addEventListener('click', e => {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (state === 'start') {
+    const cx = W / 2, cy = H * 0.62;
+    if (Math.abs(e.clientX - cx) < 100 && Math.abs(e.clientY - cy) < 30) { startGame(); return; }
+    const btnY = H * 0.74;
+    const btnW = 70, gap = 15;
+    const totalW = btnW * 3 + gap * 2;
+    const startX = (W - totalW) / 2;
+    if (e.clientY > btnY - 20 && e.clientY < btnY + 20) {
+      if (e.clientX > startX && e.clientX < startX + btnW) difficulty = 'easy';
+      else if (e.clientX > startX + btnW + gap && e.clientX < startX + btnW * 2 + gap) difficulty = 'medium';
+      else if (e.clientX > startX + btnW * 2 + gap * 2 && e.clientX < startX + btnW * 3 + gap * 2) difficulty = 'hard';
+    }
+  }
+  if (state === 'gameOver') resetToStart();
+});
+</script>
+<script>
+// ===== GAME FUNCTIONS =====
+function getDiffSettings() {
+  if (difficulty === 'easy') return { wordCount: 3, baseSpeed: 2.8, speedInc: 0.12 };
+  if (difficulty === 'hard') return { wordCount: 5, baseSpeed: 4.5, speedInc: 0.22 };
+  return { wordCount: 4, baseSpeed: 3.6, speedInc: 0.18 };
+}
+
+function startGame() {
+  score = 0; lives = 3; round = 0; combo = 0; maxCombo = 0;
+  roundHistory = [];
+  playerX = W / 2; playerTargetX = W / 2;
+  state = 'countdown';
+  countdownValue = 3;
+  countdownTimer = 0;
+  setupRound();
+  startMusic();
+}
+
+function resetToStart() {
+  state = 'start';
+  stopMusic();
+  initStartScreenWords();
+}
+
+function nextRound() {
+  setupRound();
+  state = 'playing';
+}
+
+function setupRound() {
+  round++;
+  roundResolved = false;
+  const settings = getDiffSettings();
+  const wordCount = Math.min(settings.wordCount + Math.floor(round / 8), 6);
+  const speedMult = settings.baseSpeed + Math.floor(round / 5) * settings.speedInc;
+  const entryIdx = Math.floor(Math.random() * WORDS.length);
+  baseWord = WORDS[entryIdx];
+  challengeType = Math.random() < 0.5 ? 'synonym' : 'antonym';
+  const correctList = challengeType === 'synonym' ? baseWord.synonyms : baseWord.antonyms;
+  correctWord = correctList[Math.floor(Math.random() * correctList.length)];
+  const distractors = [];
+  const allOtherWords = [];
+  WORDS.forEach((entry, idx) => {
+    if (idx !== entryIdx) { allOtherWords.push(...entry.synonyms, ...entry.antonyms); }
+  });
+  const wrongList = challengeType === 'synonym' ? baseWord.antonyms : baseWord.synonyms;
+  allOtherWords.push(...wrongList);
+  const shuffled = allOtherWords.sort(() => Math.random() - 0.5);
+  const used = new Set([correctWord.toLowerCase()]);
+  for (const w of shuffled) {
+    if (!used.has(w.toLowerCase())) { distractors.push(w); used.add(w.toLowerCase()); }
+    if (distractors.length >= wordCount - 1) break;
+  }
+  const words = [{ text: correctWord, isCorrect: true }];
+  distractors.forEach(d => words.push({ text: d, isCorrect: false }));
+  for (let i = words.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [words[i], words[j]] = [words[j], words[i]];
+  }
+  const centerZone = W * 0.5;
+  const padding = (W - centerZone) / 2;
+  const usableW = centerZone;
+  // Staggered spawn: each word gets a random delay before it appears
+  let cumulativeDelay = 0;
+  fallingWords = words.map((w, i) => {
+    const xPos = padding + Math.random() * usableW;
+    const spawnDelay = cumulativeDelay;
+    cumulativeDelay += 0.8 + Math.random() * 1.2; // 0.8–2.0s between each
+    return {
+      text: w.text, isCorrect: w.isCorrect,
+      x: Math.max(padding, Math.min(W - padding, xPos)),
+      y: -40,
+      speed: (0.7 + Math.random() * 0.8) * speedMult,
+      color: PILL_COLORS[Math.floor(Math.random() * PILL_COLORS.length)],
+      rotation: (Math.random() - 0.5) * 0.15,
+      rotSpeed: (Math.random() - 0.5) * 0.01,
+      width: 0, height: 36, caught: false, missed: false,
+      spawnDelay: spawnDelay, spawned: false
+    };
+  });
+  ctx.font = `bold ${16 * scale}px Nunito, sans-serif`;
+  fallingWords.forEach(fw => { fw.width = ctx.measureText(fw.text).width + 36; });
+  roundTimer = 0; // tracks elapsed time for staggered spawning
+  roundHistory.push({
+    baseWord: baseWord.word, type: challengeType, correct: correctWord,
+    synonyms: [...baseWord.synonyms], antonyms: [...baseWord.antonyms]
+  });
+}
+
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y, vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4 - 2,
+      life: 1, decay: 0.02 + Math.random() * 0.02, color, size: 3 + Math.random() * 4
+    });
+  }
+}
+
+function addFloatingText(text, x, y, color) {
+  floatingTexts.push({ text, x, y, alpha: 1, vy: -1.5, color, scale: 1.5 });
+}
+
+function loseLife() {
+  lives--;
+  combo = 0;
+  screenShake = 10;
+  flashColor = 'rgba(220,80,80,';
+  flashAlpha = 0.2;
+  playSound('wrong');
+  if (lives <= 0) {
+    state = 'gameOver';
+    stopMusic();
+    if (score > highScore) { highScore = score; localStorage.setItem('wordCatchHigh', highScore); }
+  }
+}
+</script>
+<script>
+// ===== UPDATE =====
+let lastTime = 0;
+function update(dt) {
+  particles = particles.filter(p => {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life -= p.decay;
+    return p.life > 0;
+  });
+  floatingTexts = floatingTexts.filter(ft => {
+    ft.y += ft.vy; ft.alpha -= 0.015; ft.scale *= 0.995;
+    return ft.alpha > 0;
+  });
+  if (screenShake > 0) screenShake *= 0.85;
+  if (screenShake < 0.5) screenShake = 0;
+  if (flashAlpha > 0) flashAlpha -= 0.01;
+  if (catMouthTimer > 0) { catMouthTimer -= dt; if (catMouthTimer <= 0) catMouthOpen = false; }
+
+  if (state === 'start') {
+    startScreenWords.forEach(sw => {
+      sw.y += sw.speed;
+      if (sw.y > H + 30) {
+        sw.y = -30; sw.x = Math.random() * W;
+        const entry = WORDS[Math.floor(Math.random() * WORDS.length)];
+        const allW = [...entry.synonyms, ...entry.antonyms, entry.word];
+        sw.text = allW[Math.floor(Math.random() * allW.length)];
+        sw.color = PILL_COLORS[Math.floor(Math.random() * PILL_COLORS.length)];
+      }
+    });
+    return;
+  }
+
+  if (state === 'countdown') {
+    countdownTimer += dt;
+    if (countdownTimer > 1) {
+      countdownTimer = 0;
+      if (countdownValue > 1) { countdownValue--; playSound('countdown'); }
+      else { state = 'playing'; playSound('go'); }
+    }
+    return;
+  }
+
+  if (state !== 'playing') return;
+
+  const speed = 8;
+  if (keys['ArrowLeft'] || keys['a'] || keys['A']) playerTargetX -= speed;
+  if (keys['ArrowRight'] || keys['d'] || keys['D']) playerTargetX += speed;
+  if (touchActive && touchX !== null) playerTargetX = touchX;
+  playerTargetX = Math.max(25, Math.min(W - 25, playerTargetX));
+  playerX += (playerTargetX - playerX) * 0.15;
+
+  const playerY = H - 70;
+  const playerW = 50, playerH = 50;
+
+  // Advance round timer for staggered spawning
+  roundTimer += dt;
+
+  // Spawn words as their delay elapses
+  fallingWords.forEach(fw => {
+    if (!fw.spawned && roundTimer >= fw.spawnDelay) {
+      fw.spawned = true;
+    }
+  });
+
+  fallingWords.forEach(fw => {
+    if (!fw.spawned || fw.caught || fw.missed) return;
+    fw.y += fw.speed;
+    fw.rotation += fw.rotSpeed;
+    const fwLeft = fw.x - fw.width / 2, fwRight = fw.x + fw.width / 2;
+    const fwTop = fw.y - fw.height / 2, fwBottom = fw.y + fw.height / 2;
+    const pLeft = playerX - playerW / 2, pRight = playerX + playerW / 2;
+    const pTop = playerY - playerH / 2, pBottom = playerY + playerH / 2;
+
+    if (fwRight > pLeft && fwLeft < pRight && fwBottom > pTop && fwTop < pBottom) {
+      fw.caught = true;
+      catMouthOpen = true;
+      catMouthTimer = 0.4;
+      if (fw.isCorrect) {
+        combo++;
+        if (combo > maxCombo) maxCombo = combo;
+        const mult = Math.min(combo, 5);
+        score += 10 * mult;
+        flashColor = 'rgba(144,213,150,';
+        flashAlpha = 0.2;
+        playSound('correct');
+        if (combo >= 3 && combo % 2 === 1) playSound('combo');
+        spawnParticles(fw.x, fw.y, MINT, 15);
+        addFloatingText(`✅ Correct! +${10 * mult}`, fw.x, fw.y - 20, '#5A9E6F');
+        if (mult > 1) addFloatingText(`x${mult} COMBO`, fw.x, fw.y - 50, WARM_BROWN);
+        roundResolved = true;
+        setTimeout(() => { if (state === 'playing') nextRound(); }, 800);
+      } else {
+        spawnParticles(fw.x, fw.y, ROSE, 12);
+        addFloatingText('❌ Wrong!', fw.x, fw.y - 20, '#C0616E');
+        roundResolved = true;
+        loseLife();
+        if (state === 'playing') setTimeout(() => { if (state === 'playing') nextRound(); }, 800);
+      }
+    }
+    if (fw.y > H + 40) fw.missed = true;
+  });
+
+  // Round ends when all words have spawned AND all are either caught or missed
+  if (!roundResolved && fallingWords.length > 0) {
+    const allSpawned = fallingWords.every(fw => fw.spawned);
+    const allGone = fallingWords.every(fw => fw.caught || fw.missed);
+    if (allSpawned && allGone) {
+      roundResolved = true;
+      addFloatingText('💨 Missed!', W / 2, H / 2, WARM_BROWN);
+      loseLife();
+      if (state === 'playing') setTimeout(() => { if (state === 'playing') nextRound(); }, 800);
+    }
+  }
+}
+</script>
+<script>
+// ===== DRAW HELPERS =====
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arc(x + w - r, y + r, r, -Math.PI/2, 0);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arc(x + w - r, y + h - r, r, 0, Math.PI/2);
+  ctx.lineTo(x + r, y + h);
+  ctx.arc(x + r, y + h - r, r, Math.PI/2, Math.PI);
+  ctx.lineTo(x, y + r);
+  ctx.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5);
+  ctx.closePath();
+}
+
+// ===== BACKGROUND (image asset) =====
+function drawBackground() {
+  if (bgImg.complete && bgImg.naturalWidth > 0) {
+    // Cover the canvas while preserving aspect ratio
+    const imgRatio = bgImg.naturalWidth / bgImg.naturalHeight;
+    const canvasRatio = W / H;
+    let drawW, drawH, drawX, drawY;
+    if (canvasRatio > imgRatio) {
+      drawW = W; drawH = W / imgRatio;
+      drawX = 0; drawY = (H - drawH) / 2;
+    } else {
+      drawH = H; drawW = H * imgRatio;
+      drawX = (W - drawW) / 2; drawY = 0;
+    }
+    ctx.drawImage(bgImg, drawX, drawY, drawW, drawH);
+  } else {
+    // Fallback while loading
+    ctx.fillStyle = '#90C880';
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+</script>
+<script>
+// ===== DRAW PILL (kawaii style with warm brown outline) =====
+function drawPill(x, y, w, h, color, text, rotation) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (rotation) ctx.rotate(rotation);
+
+  const r = h / 2;
+
+  // Soft shadow
+  ctx.shadowColor = 'rgba(139,107,74,0.2)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 3;
+
+  // Pill fill
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(-w/2 + r, -h/2);
+  ctx.lineTo(w/2 - r, -h/2);
+  ctx.arc(w/2 - r, 0, r, -Math.PI/2, Math.PI/2);
+  ctx.lineTo(-w/2 + r, h/2);
+  ctx.arc(-w/2 + r, 0, r, Math.PI/2, -Math.PI/2);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.shadowColor = 'transparent';
+
+  // Warm brown outline
+  ctx.strokeStyle = WARM_BROWN;
+  ctx.lineWidth = OUTLINE_W;
+  ctx.beginPath();
+  ctx.moveTo(-w/2 + r, -h/2);
+  ctx.lineTo(w/2 - r, -h/2);
+  ctx.arc(w/2 - r, 0, r, -Math.PI/2, Math.PI/2);
+  ctx.lineTo(-w/2 + r, h/2);
+  ctx.arc(-w/2 + r, 0, r, Math.PI/2, -Math.PI/2);
+  ctx.closePath();
+  ctx.stroke();
+
+  // Text
+  ctx.fillStyle = DARK_BROWN;
+  ctx.font = `bold ${16 * Math.min(scale, 1.3)}px Nunito, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 0, 1);
+
+  ctx.restore();
+}
+
+// ===== CAT CHARACTER (image assets) =====
+function drawPlayer(x, y) {
+  const img = catMouthOpen ? catOpenImg : catDefaultImg;
+  if (img.complete && img.naturalWidth > 0) {
+    const catW = 70 * Math.min(scale, 1.3);
+    const catH = catW * (img.naturalHeight / img.naturalWidth);
+    ctx.drawImage(img, x - catW / 2, y - catH / 2, catW, catH);
+  }
+}
+
+// ===== HUD =====
+function drawHUD() {
+  // Score
+  ctx.fillStyle = WARM_BROWN;
+  ctx.font = `bold ${20 * Math.min(scale, 1.2)}px Fredoka One, Nunito, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText(`⭐ SCORE: ${score}`, W / 2, 30);
+
+  // Lives and combo
+  let heartsStr = '';
+  for (let i = 0; i < 3; i++) heartsStr += i < lives ? '❤️' : '🤍';
+  ctx.font = `${18 * Math.min(scale, 1.2)}px Nunito, sans-serif`;
+  ctx.fillStyle = DARK_BROWN;
+  const comboStr = combo > 1 ? `  x${Math.min(combo, 5)} COMBO` : '';
+  ctx.fillText(heartsStr + comboStr, W / 2, 55);
+
+  // Combo glow
+  if (combo >= 3) {
+    ctx.save();
+    const glowIntensity = Math.sin(Date.now() * 0.005) * 0.3 + 0.7;
+    ctx.shadowColor = ROSE;
+    ctx.shadowBlur = 12 * glowIntensity;
+    ctx.fillStyle = WARM_BROWN;
+    ctx.font = `bold ${16 * Math.min(scale, 1.2)}px Fredoka One, Nunito, sans-serif`;
+    ctx.fillText(`🔥 ${combo} STREAK`, W / 2, 78);
+    ctx.restore();
+  }
+
+  // Base word and challenge
+  if (baseWord && state === 'playing') {
+    // Base word card background
+    const cardW = 240 * Math.min(scale, 1.2);
+    const cardH = 56;
+    const cardX = W/2 - cardW/2;
+    const cardY = 88;
+    ctx.fillStyle = 'rgba(255,245,230,0.85)';
+    ctx.strokeStyle = LIGHT_BROWN;
+    ctx.lineWidth = 2;
+    roundRect(cardX, cardY, cardW, cardH, 14);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = DARK_BROWN;
+    ctx.font = `bold ${24 * Math.min(scale, 1.3)}px Fredoka One, Nunito, sans-serif`;
+    ctx.fillText(`"${baseWord.word.toUpperCase()}"`, W / 2, 110);
+
+    ctx.fillStyle = challengeType === 'synonym' ? '#5A9E6F' : '#C0616E';
+    ctx.font = `bold ${16 * Math.min(scale, 1.2)}px Nunito, sans-serif`;
+    ctx.fillText(`🎯 Catch the ${challengeType.toUpperCase()}!`, W / 2, 134);
+  }
+
+  // Round number
+  if (round > 0) {
+    ctx.fillStyle = 'rgba(139,107,74,0.4)';
+    ctx.font = `${12 * Math.min(scale, 1.2)}px Nunito, sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.fillText(`Round ${round}`, W - 15, 25);
+    ctx.textAlign = 'center';
+  }
+
+  // High score
+  ctx.fillStyle = 'rgba(139,107,74,0.4)';
+  ctx.font = `${12 * Math.min(scale, 1.2)}px Nunito, sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.fillText(`HI: ${highScore}`, 15, 25);
+  ctx.textAlign = 'center';
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function drawFloatingTexts() {
+  floatingTexts.forEach(ft => {
+    ctx.globalAlpha = ft.alpha;
+    ctx.fillStyle = ft.color;
+    ctx.font = `bold ${20 * ft.scale * Math.min(scale, 1.2)}px Nunito, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(ft.text, ft.x, ft.y);
+  });
+  ctx.globalAlpha = 1;
+}
+</script>
+<script>
+// ===== SCREENS =====
+function drawKawaiiBtn(x, y, w, h, fillColor, strokeColor, text, textColor) {
+  const r = h / 2;
+  ctx.save();
+  ctx.shadowColor = 'rgba(139,107,74,0.25)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = fillColor;
+  ctx.beginPath();
+  ctx.moveTo(x - w/2 + r, y - h/2);
+  ctx.lineTo(x + w/2 - r, y - h/2);
+  ctx.arc(x + w/2 - r, y, r, -Math.PI/2, Math.PI/2);
+  ctx.lineTo(x - w/2 + r, y + h/2);
+  ctx.arc(x - w/2 + r, y, r, Math.PI/2, -Math.PI/2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = textColor;
+  ctx.font = `bold ${20 * Math.min(scale, 1.2)}px Fredoka One, Nunito, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText(text, x, y + 2);
+}
+
+function drawStartScreen() {
+  drawBackground();
+
+  // Semi-transparent overlay so text is readable
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Falling background words
+  startScreenWords.forEach(sw => {
+    ctx.globalAlpha = sw.alpha;
+    drawPill(sw.x, sw.y, ctx.measureText(sw.text).width + 36, 32, sw.color, sw.text, sw.rotation);
+  });
+  ctx.globalAlpha = 1;
+
+  // Title
+  ctx.save();
+  const pulse = Math.sin(Date.now() * 0.003) * 2;
+  ctx.shadowColor = 'rgba(248,180,180,0.6)';
+  ctx.shadowBlur = 15 + pulse;
+  ctx.fillStyle = DARK_BROWN;
+  ctx.font = `bold ${42 * Math.min(scale, 1.3)}px Fredoka One, Nunito, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('🐱 Word Catch', W / 2, H * 0.28);
+  ctx.restore();
+
+  // Subtitle
+  ctx.fillStyle = WARM_BROWN;
+  ctx.font = `${16 * Math.min(scale, 1.2)}px Nunito, sans-serif`;
+  ctx.fillText('Catch the right word!', W / 2, H * 0.34);
+
+  // Instructions
+  ctx.fillStyle = 'rgba(139,107,74,0.6)';
+  ctx.font = `${13 * Math.min(scale, 1.1)}px Nunito, sans-serif`;
+  ctx.fillText('Use ← → or A/D to move. On mobile, touch to move.', W / 2, H * 0.42);
+  ctx.fillText('Catch synonyms or antonyms of the base word.', W / 2, H * 0.46);
+  ctx.fillText('Wrong catch or miss = lose a life. 3 lives total.', W / 2, H * 0.50);
+
+  // Start button
+  drawKawaiiBtn(W / 2, H * 0.62, 190, 48, SOFT_PINK, WARM_BROWN, '▶ Start Game', DARK_BROWN);
+
+  // Difficulty selector
+  const diffY = H * 0.74;
+  ctx.fillStyle = 'rgba(139,107,74,0.5)';
+  ctx.font = `${14 * Math.min(scale, 1.1)}px Nunito, sans-serif`;
+  ctx.fillText('Difficulty (press 1/2/3 or tap):', W / 2, diffY - 25);
+
+  const diffs = ['easy', 'medium', 'hard'];
+  const labels = ['Easy', 'Medium', 'Hard'];
+  const btnColors = [MINT, PEACH, SOFT_PINK];
+  const dbw = 70, dgap = 15;
+  const totalDW = dbw * 3 + dgap * 2;
+  const dStartX = (W - totalDW) / 2;
+
+  diffs.forEach((d, i) => {
+    const dx = dStartX + i * (dbw + dgap) + dbw / 2;
+    const isActive = difficulty === d;
+    const r = 12;
+    ctx.fillStyle = isActive ? btnColors[i] : 'rgba(212,165,116,0.15)';
+    ctx.strokeStyle = isActive ? WARM_BROWN : 'rgba(139,107,74,0.3)';
+    ctx.lineWidth = isActive ? 2.5 : 1.5;
+    ctx.beginPath();
+    ctx.moveTo(dx - dbw/2 + r, diffY - 15);
+    ctx.lineTo(dx + dbw/2 - r, diffY - 15);
+    ctx.arc(dx + dbw/2 - r, diffY, r, -Math.PI/2, Math.PI/2);
+    ctx.lineTo(dx - dbw/2 + r, diffY + 15);
+    ctx.arc(dx - dbw/2 + r, diffY, r, Math.PI/2, -Math.PI/2);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = isActive ? DARK_BROWN : 'rgba(139,107,74,0.5)';
+    ctx.font = `bold ${13 * Math.min(scale, 1.1)}px Nunito, sans-serif`;
+    ctx.fillText(labels[i], dx, diffY + 1);
+  });
+}
+
+function drawCountdown() {
+  drawBackground();
+  drawHUD();
+  drawPlayer(playerX, H - 70);
+
+  // Countdown card
+  const cScale = 1 + (1 - countdownTimer) * 0.3;
+  ctx.save();
+  ctx.globalAlpha = 1 - countdownTimer * 0.3;
+  ctx.fillStyle = DARK_BROWN;
+  ctx.font = `bold ${72 * cScale * Math.min(scale, 1.3)}px Fredoka One, Nunito, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(248,180,180,0.5)';
+  ctx.shadowBlur = 15;
+  ctx.fillText(countdownValue === 0 ? 'GO!' : countdownValue, W / 2, H * 0.45);
+  ctx.restore();
+}
+
+function drawGameplay() {
+  drawBackground();
+
+  if (screenShake > 0) {
+    ctx.save();
+    ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+  }
+
+  drawHUD();
+
+  fallingWords.forEach(fw => {
+    if (!fw.spawned || fw.caught || fw.missed) return;
+    drawPill(fw.x, fw.y, fw.width, fw.height, fw.color, fw.text, fw.rotation);
+  });
+
+  drawPlayer(playerX, H - 70);
+  drawParticles();
+  drawFloatingTexts();
+
+  if (screenShake > 0) ctx.restore();
+
+  if (flashAlpha > 0) {
+    ctx.fillStyle = flashColor + flashAlpha + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawGameOver() {
+  drawBackground();
+
+  // Soft overlay
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+
+  // Game Over card
+  const cardW = Math.min(W * 0.85, 340);
+  const cardH = H * 0.65;
+  const cardX = (W - cardW) / 2;
+  const cardY = H * 0.1;
+  ctx.save();
+  ctx.shadowColor = 'rgba(139,107,74,0.2)';
+  ctx.shadowBlur = 15;
+  ctx.fillStyle = '#FFF8F0';
+  ctx.strokeStyle = LIGHT_BROWN;
+  ctx.lineWidth = 2.5;
+  roundRect(cardX, cardY, cardW, cardH, 20);
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+
+  // Title
+  ctx.fillStyle = ROSE;
+  ctx.font = `bold ${34 * Math.min(scale, 1.3)}px Fredoka One, Nunito, sans-serif`;
+  ctx.fillText('Game Over', W / 2, cardY + 50);
+
+  // Stats
+  ctx.fillStyle = DARK_BROWN;
+  ctx.font = `bold ${22 * Math.min(scale, 1.2)}px Nunito, sans-serif`;
+  ctx.fillText(`Final Score: ${score}`, W / 2, cardY + 90);
+
+  ctx.fillStyle = WARM_BROWN;
+  ctx.font = `${17 * Math.min(scale, 1.2)}px Nunito, sans-serif`;
+  ctx.fillText(`Best Combo: x${maxCombo}`, W / 2, cardY + 118);
+  ctx.fillText(`Rounds: ${round}`, W / 2, cardY + 142);
+
+  if (score >= highScore && score > 0) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(248,180,180,0.5)';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = ROSE;
+    ctx.font = `bold ${16 * Math.min(scale, 1.2)}px Nunito, sans-serif`;
+    ctx.fillText('🏆 NEW HIGH SCORE!', W / 2, cardY + 168);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = 'rgba(139,107,74,0.5)';
+    ctx.font = `${14 * Math.min(scale, 1.1)}px Nunito, sans-serif`;
+    ctx.fillText(`High Score: ${highScore}`, W / 2, cardY + 168);
+  }
+
+  // Word recap
+  if (roundHistory.length > 0) {
+    ctx.fillStyle = WARM_BROWN;
+    ctx.font = `bold ${14 * Math.min(scale, 1.1)}px Nunito, sans-serif`;
+    ctx.fillText('📖 Word Recap', W / 2, cardY + 198);
+
+    const maxShow = Math.min(roundHistory.length, 5);
+    const startIdx = Math.max(0, roundHistory.length - maxShow);
+    ctx.font = `${12 * Math.min(scale, 1.1)}px Nunito, sans-serif`;
+    for (let i = 0; i < maxShow; i++) {
+      const rh = roundHistory[startIdx + i];
+      const yPos = cardY + 220 + i * 20;
+      ctx.fillStyle = 'rgba(92,61,46,0.6)';
+      ctx.fillText(`${rh.baseWord.toUpperCase()} → ${rh.type}: ${rh.correct}`, W / 2, yPos);
+    }
+    if (roundHistory.length > 5) {
+      ctx.fillStyle = 'rgba(139,107,74,0.4)';
+      ctx.fillText(`...and ${roundHistory.length - 5} more`, W / 2, cardY + 220 + maxShow * 20);
+    }
+  }
+
+  // Play Again button
+  const btnY = cardY + cardH - 40;
+  drawKawaiiBtn(W / 2, btnY, 200, 46, BABY_BLUE, WARM_BROWN, '🔄 Play Again', DARK_BROWN);
+}
+</script>
+<script>
+// ===== GAME LOOP =====
+function gameLoop(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+
+  resize();
+  update(dt);
+
+  ctx.clearRect(0, 0, W, H);
+
+  switch (state) {
+    case 'start': drawStartScreen(); break;
+    case 'countdown': drawCountdown(); break;
+    case 'playing': drawGameplay(); break;
+    case 'gameOver': drawGameOver(); break;
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
