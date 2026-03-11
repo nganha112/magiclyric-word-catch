@@ -51,6 +51,8 @@ const catDefaultImg = new Image();
 catDefaultImg.src = 'asset/cat_default.svg';
 const catOpenImg = new Image();
 catOpenImg.src = 'asset/cat_open.svg';
+const logoImg = new Image();
+logoImg.src = 'asset/logo.png';
 let catMouthOpen = false;
 let catMouthTimer = 0;
 
@@ -811,16 +813,27 @@ function drawStartScreen() {
   });
   ctx.globalAlpha = 1;
 
-  // Title
-  ctx.save();
-  const pulse = Math.sin(Date.now() * 0.003) * 2;
-  ctx.shadowColor = 'rgba(248,180,180,0.6)';
-  ctx.shadowBlur = 15 + pulse;
-  ctx.fillStyle = DARK_BROWN;
-  ctx.font = `bold ${42 * Math.min(scale, 1.3)}px Fredoka One, Nunito, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.fillText('🐱 Word Catch', W / 2, H * 0.28);
-  ctx.restore();
+  // Logo
+  if (logoImg.complete && logoImg.naturalWidth > 0) {
+    const logoW = Math.min(W * 0.6, 260);
+    const logoH = logoW * (logoImg.naturalHeight / logoImg.naturalWidth);
+    const pulse = Math.sin(Date.now() * 0.003) * 2;
+    ctx.save();
+    ctx.shadowColor = 'rgba(248,180,180,0.6)';
+    ctx.shadowBlur = 15 + pulse;
+    ctx.drawImage(logoImg, W / 2 - logoW / 2, H * 0.18 - logoH / 2, logoW, logoH);
+    ctx.restore();
+  } else {
+    ctx.save();
+    const pulse = Math.sin(Date.now() * 0.003) * 2;
+    ctx.shadowColor = 'rgba(248,180,180,0.6)';
+    ctx.shadowBlur = 15 + pulse;
+    ctx.fillStyle = DARK_BROWN;
+    ctx.font = `bold ${42 * Math.min(scale, 1.3)}px Fredoka One, Nunito, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('🐱 Word Catch', W / 2, H * 0.28);
+    ctx.restore();
+  }
 
   // Subtitle
   ctx.fillStyle = WARM_BROWN;
